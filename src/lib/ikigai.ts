@@ -1,10 +1,14 @@
 const API_BASE = "https://panel.ikigaimangas.com/api/swf";
 
-const HEADERS = {
+const HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   Accept: "application/json",
+  Referer: "https://ikigaimangas.com/",
+  Origin: "https://ikigaimangas.com",
 };
+
+const FETCH_TIMEOUT = 10000; // 10 seconds
 
 // Types
 
@@ -72,12 +76,30 @@ export interface PaginatedResponse<T> {
 // API functions
 
 async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: HEADERS,
-    next: { revalidate: 600 },
-  });
-  if (!res.ok) throw new Error(`Ikigai API error: ${res.status} for ${url}`);
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  try {
+    const res = await fetch(url, {
+      headers: HEADERS,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `Ikigai API error: ${res.status} for ${url} — ${text.slice(0, 200)}`
+      );
+    }
+    return res.json();
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Ikigai API timeout after ${FETCH_TIMEOUT}ms for ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function getPopularManga(

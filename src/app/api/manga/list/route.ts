@@ -7,10 +7,11 @@ export async function GET(req: NextRequest) {
     const data = await getAllSeries(page, 18);
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Manga list error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Manga list error:", message);
     return NextResponse.json(
-      { error: "Error al cargar la lista de mangas" },
-      { status: 500 }
+      { error: `Error al cargar la lista de mangas: ${message}` },
+      { status: 502 }
     );
   }
 }

@@ -18,12 +18,17 @@ export function MangaSection() {
 
   useEffect(() => {
     fetch("/api/manga/home")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((d) => {
+        if (d.error) throw new Error(d.error);
         setData(d);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("MangaSection error:", err);
         setError("Error al cargar mangas");
         setLoading(false);
       });
@@ -59,18 +64,18 @@ export function MangaSection() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {loading
             ? Array.from({ length: 12 }).map((_, i) => (
-                <MangaCardSkeleton key={i} />
-              ))
+              <MangaCardSkeleton key={i} />
+            ))
             : data?.recent?.map((entry) => (
-                <MangaCard
-                  key={entry.id}
-                  title={entry.series_name}
-                  cover={entry.thumbnail}
-                  slug={entry.series_slug}
-                  chapterName={entry.name}
-                  type={entry.type}
-                />
-              ))}
+              <MangaCard
+                key={entry.id}
+                title={entry.series_name}
+                cover={entry.thumbnail}
+                slug={entry.series_slug}
+                chapterName={entry.name}
+                type={entry.type}
+              />
+            ))}
         </div>
       </div>
 
@@ -94,19 +99,19 @@ export function MangaSection() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {loading
             ? Array.from({ length: 12 }).map((_, i) => (
-                <MangaCardSkeleton key={i} />
-              ))
+              <MangaCardSkeleton key={i} />
+            ))
             : data?.popular?.map((manga) => (
-                <MangaCard
-                  key={manga.id}
-                  title={manga.name}
-                  cover={manga.cover}
-                  slug={manga.slug}
-                  chapterCount={manga.chapter_count}
-                  type={manga.type}
-                  status={manga.status?.name}
-                />
-              ))}
+              <MangaCard
+                key={manga.id}
+                title={manga.name}
+                cover={manga.cover}
+                slug={manga.slug}
+                chapterCount={manga.chapter_count}
+                type={manga.type}
+                status={manga.status?.name}
+              />
+            ))}
         </div>
       </div>
     </div>

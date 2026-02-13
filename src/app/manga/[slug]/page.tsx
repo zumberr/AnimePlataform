@@ -261,11 +261,18 @@ export default function MangaDetailPage() {
                       )}
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(chapter.published_at).toLocaleDateString("es-ES", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {chapter.published_at
+                        ? (() => {
+                          const d = new Date(chapter.published_at);
+                          return isNaN(d.getTime())
+                            ? "Sin fecha"
+                            : d.toLocaleDateString("es-ES", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            });
+                        })()
+                        : "Sin fecha"}
                     </span>
                   </Link>
                 ))}

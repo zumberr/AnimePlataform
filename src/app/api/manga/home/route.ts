@@ -13,10 +13,11 @@ export async function GET() {
       recent: recent.data.slice(0, 15),
     });
   } catch (error) {
-    console.error("Manga home error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Manga home error:", message);
     return NextResponse.json(
-      { error: "Error al cargar mangas" },
-      { status: 500 }
+      { error: `Error al cargar mangas: ${message}` },
+      { status: 502 }
     );
   }
 }

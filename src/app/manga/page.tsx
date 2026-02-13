@@ -16,18 +16,46 @@ export default function MangaListPage() {
   const [data, setData] = useState<PageData | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     fetch(`/api/manga/list?page=${page}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
+        if (d.error) throw new Error(d.error);
         setData(d);
         setLoading(false);
         window.scrollTo({ top: 0, behavior: "smooth" });
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        setError(err.message || "Error al cargar mangas");
+        setLoading(false);
+      });
   }, [page]);
+
+  if (error && !data) {
+    return (
+      <div className="min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <BookOpen size={48} className="text-muted-foreground" />
+            <p className="text-destructive text-sm">{error}</p>
+            <button
+              onClick={() => setPage(1)}
+              className="text-primary hover:underline text-sm"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -40,7 +68,7 @@ export default function MangaListPage() {
           </div>
           <p className="text-muted-foreground text-sm">
             Explora nuestra coleccion de manhwas en español.
-            {data && (
+            {data?.total != null && (
               <span className="ml-1 text-xs">
                 ({data.total.toLocaleString()} series)
               </span>
@@ -52,19 +80,19 @@ export default function MangaListPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {loading
             ? Array.from({ length: 18 }).map((_, i) => (
-                <MangaCardSkeleton key={i} />
-              ))
+              <MangaCardSkeleton key={i} />
+            ))
             : data?.data?.map((manga) => (
-                <MangaCard
-                  key={manga.id}
-                  title={manga.name}
-                  cover={manga.cover}
-                  slug={manga.slug}
-                  chapterCount={manga.chapter_count}
-                  type={manga.type}
-                  status={manga.status?.name}
-                />
-              ))}
+              <MangaCard
+                key={manga.id}
+                title={manga.name}
+                cover={manga.cover}
+                slug={manga.slug}
+                chapterCount={manga.chapter_count}
+                type={manga.type}
+                status={manga.status?.name}
+              />
+            ))}
         </div>
 
         {/* Pagination */}
@@ -91,11 +119,10 @@ export default function MangaListPage() {
                   <button
                     key={p}
                     onClick={() => setPage(p as number)}
-                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
-                      page === p
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${page === p
                         ? "bg-primary text-white"
                         : "bg-secondary hover:bg-secondary/80 text-foreground"
-                    }`}
+                      }`}
                   >
                     {p}
                   </button>
