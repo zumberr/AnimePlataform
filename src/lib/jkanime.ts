@@ -16,6 +16,22 @@ export interface EpisodeSource {
   url: string;
 }
 
+interface RecentEpisodeJK {
+  animeTitle: string;
+  episodeNumber: string;
+  poster: string;
+  slug: string;
+  animeSlug: string;
+}
+
+interface SearchResultJK {
+  id: string;
+  title: string;
+  poster: string;
+  type: string;
+  slug: string;
+}
+
 async function fetchHTML(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: HEADERS,
@@ -39,21 +55,38 @@ export async function getEpisodeSourcesJK(
 
   const $ = cheerio.load(html);
   const sources: EpisodeSource[] = [];
+  const serverNames = new Map<number, string>();
+
+  $(".bg-servers a, a.btn-show, a.servers").each((_, el) => {
+    const $el = $(el);
+    const name = $el.text().trim();
+    const dataId = Number($el.attr("data-id"));
+    if (name && Number.isFinite(dataId)) {
+      serverNames.set(dataId, name);
+    }
+  });
 
   // Extract inline video[] assignments (Desu, Magi etc JK players)
   $("script").each((_, el) => {
     const content = $(el).html() || "";
-    // Match video[INDEX] = '<iframe ... >'
-    const videoRegex = /video\[(\d+)\]\s*=\s*['"](<iframe[^'"]+>)['"]/g;
+    // Match video[INDEX] = '<iframe ...>'; the iframe attributes contain quotes.
+    const videoRegex = /video\[(\d+)\]\s*=\s*(['"])([\s\S]*?)\2\s*;/g;
     let m;
     while ((m = videoRegex.exec(content)) !== null) {
       const idx = parseInt(m[1], 10);
-      const iframeHtml = m[2];
+      const iframeHtml = m[3]
+        .replace(/\\\//g, "/")
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'");
       // Extract actual src from iframe string
       const srcMatch = iframeHtml.match(/src=["']([^"']+)["']/);
       if (srcMatch) {
+        const name = serverNames.get(idx);
         sources.push({
-          server: `JK${idx === 0 ? " Desu" : idx === 1 ? " Magi" : ""}`.trim(),
+          server:
+            name && name.length < 32
+              ? `JK ${name}`
+              : `JK${idx === 0 ? " Desu" : idx === 1 ? " Magi" : ""}`.trim(),
           url: srcMatch[1],
         });
       }
@@ -81,28 +114,14 @@ export async function getEpisodeSourcesJK(
     }
   });
 
-  // Parse buttons for better server names if video not associated
-  // The buttons are .bg-servers a or a.btn-show
-  $(".bg-servers a, a.btn-show, a.servers").each((_, el) => {
-    const $el = $(el);
-    const name = $el.text().trim();
-    const dataId = $el.attr("data-id");
-    if (name && dataId) {
-      // If we already have matching index we can rename, but simple append if not duplicate
-      const existing = sources.findIndex((s) =>
-        s.server.toLowerCase().includes(name.toLowerCase()),
-      );
-      if (existing === -1 && sources.length > 0) {
-        // attempt match by index later; for now keep extracted
-      }
-    }
-  });
-
   // Filter unique by url
   const seen = new Set<string>();
   const unique = sources.filter((s) => {
-    if (!s.url || seen.has(s.url)) return false;
-    seen.add(s.url);
+    if (!s.url) return false;
+    const url = s.url.startsWith("//") ? `https:${s.url}` : s.url;
+    if (!/^https?:\/\//.test(url) || seen.has(url.toLowerCase())) return false;
+    s.url = url;
+    seen.add(url.toLowerCase());
     return true;
   });
 
@@ -173,18 +192,12 @@ export async function getAnimeDetailJK(slug: string): Promise<{
 
 // For home: recent episodes from JK (used to reduce FLV dependency)
 export async function getRecentEpisodesJK(): Promise<
-  Array<{
-    animeTitle: string;
-    episodeNumber: string;
-    poster: string;
-    slug: string; // full ep slug like anime-123 for compat
-    animeSlug: string;
-  }>
+  RecentEpisodeJK[]
 > {
   try {
     const html = await fetchHTML(BASE_URL + "/");
     const $ = cheerio.load(html);
-    const recents: any[] = [];
+    const recents: RecentEpisodeJK[] = [];
 
     // JK shows recent episodes with links like /slug/num/
     $("a").each((_, el) => {
@@ -243,7 +256,7 @@ export async function searchAnimeJK(query: string) {
       `${BASE_URL}/buscar/${encodeURIComponent(query)}/`,
     );
     const $ = cheerio.load(html);
-    const results: any[] = [];
+    const results: SearchResultJK[] = [];
 
     // Better extraction focusing on main results
     $("a[href]").each((_, el) => {
@@ -253,7 +266,7 @@ export async function searchAnimeJK(query: string) {
       const slug = m[1];
       if (["buscar", "top", "login", "registro", "perfil"].includes(slug))
         return;
-      let title = $(el).text().trim();
+      const title = $(el).text().trim();
       if (!title || title.length < 2) return;
       if (
         /iniciar|sesion|registr|buscar|top|comentarios|historial/i.test(title)

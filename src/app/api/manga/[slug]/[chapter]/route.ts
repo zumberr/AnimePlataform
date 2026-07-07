@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
 const READER_DOMAINS = [
+  "https://ikigaicomics.lat",
   "https://visorikigai.net",
   "https://ikigaimangas.com",
 ];
@@ -48,6 +49,7 @@ function normalizeImageUrl(raw: string, domain: string) {
 
 function isIkigaiImageUrl(url: string) {
   return (
+    url.includes("media.ikigaicomics.lat/capitulos/") ||
     url.includes("media.ikigaimangas.cloud/series/") ||
     url.includes("image.ikigaimangas.cloud/series/") ||
     (url.includes("ikigaimangas") &&
@@ -94,7 +96,7 @@ async function imageExists(url: string) {
 function extractIkigaiImageUrls(text: string) {
   const normalized = text.replace(/\\\//g, "/");
   const matches = normalized.match(
-    /https?:\/\/(?:media|image)\.ikigaimangas\.cloud\/series\/[^\s"'<>\\]+?\.(?:webp|png|jpe?g|avif)/gi
+    /https?:\/\/(?:(?:media|image)\.ikigaimangas\.cloud\/series|media\.ikigaicomics\.lat\/capitulos)\/[^\s"'<>\\]+?\.(?:webp|png|jpe?g|avif)/gi
   );
   if (!matches) return [];
   return [...new Set(matches)];
@@ -146,8 +148,13 @@ async function tryFetchChapterImages(
   chapter: string
 ): Promise<string[]> {
   for (const domain of READER_DOMAINS) {
+    const urls =
+      domain.includes("ikigaicomics.lat")
+        ? [`${domain}/series/${slug}/capitulo/${chapter}/`]
+        : [`${domain}/series/${slug}/chapter/${chapter}`];
+
+    for (const url of urls) {
     try {
-      const url = `${domain}/series/${slug}/chapter/${chapter}`;
       const res = await fetchWithTimeout(
         url,
         {
@@ -206,6 +213,7 @@ async function tryFetchChapterImages(
     } catch {
       continue;
     }
+    }
   }
 
   return [];
@@ -231,13 +239,28 @@ async function constructImageUrls(
 
   // Use the API to get chapter info to find the chapter ID
   try {
-    const chaptersBaseUrl = `https://panel.ikigaimangas.com/api/swf/series/${encodeURIComponent(seriesSlug)}/chapters`;
-
     type ChapterEntry = { id: string; name: string };
     type ChapterResponse = {
       data?: ChapterEntry[];
       meta?: { last_page?: number };
     };
+
+    const newApiRes = await fetchWithTimeout(
+      `https://api.ikigaicomics.lat/api/series/${encodeURIComponent(seriesSlug)}`,
+      { headers: { "User-Agent": HEADERS["User-Agent"], Accept: "application/json" } }
+    );
+    if (newApiRes.ok) {
+      const newApiData = await newApiRes.json();
+      const found = newApiData.data?.capitulos?.find((c: { numero?: string | number }) =>
+        isSameChapter(String(c.numero ?? ""), chapter)
+      );
+      if (found) {
+        const htmlImages = await tryFetchChapterImages(seriesSlug, chapter);
+        if (htmlImages.length > 0) return htmlImages;
+      }
+    }
+
+    const chaptersBaseUrl = `https://panel.ikigaimangas.com/api/swf/series/${encodeURIComponent(seriesSlug)}/chapters`;
 
     const firstPageRes = await fetchWithTimeout(
       `${chaptersBaseUrl}?page=1&pageSize=100`,

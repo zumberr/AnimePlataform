@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { getPopularManga, getNewChapters } from "@/lib/ikigai";
+import {
+  getPopularManga,
+  getNewChapters,
+  type MangaSeries,
+  type NewChapterEntry,
+} from "@/lib/ikigai";
 
 export async function GET() {
   try {
     const results = await Promise.allSettled([
-      getPopularManga(1).catch(() => ({ data: [] as any[] })),
-      getNewChapters(1).catch(() => ({ data: [] as any[] })),
+      getPopularManga(1).catch(() => ({ data: [] as MangaSeries[] })),
+      getNewChapters(1).catch(() => ({ data: [] as NewChapterEntry[] })),
     ]);
 
     const popular =

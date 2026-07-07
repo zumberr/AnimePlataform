@@ -16,6 +16,64 @@ export interface EpisodeSource {
   url: string;
 }
 
+interface RecentEpisodeTio {
+  animeTitle: string;
+  episodeNumber: string;
+  poster: string;
+  slug: string;
+  animeSlug: string;
+}
+
+interface SearchResultTio {
+  id: string;
+  title: string;
+  poster: string;
+  type: string;
+  slug: string;
+}
+
+function normalizePlayerUrl(value: string): string {
+  let url = value
+    .trim()
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/g, "&");
+  if (url.startsWith("//")) url = `https:${url}`;
+  return url;
+}
+
+function isUsablePlayerUrl(url: string): boolean {
+  if (!/^https?:\/\//.test(url)) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host === "tioanime.com" && (path.startsWith("/ver/") || path.startsWith("/anime/"))) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function labelFromUrl(url: string, fallback = "Player") {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    if (host.includes("dood")) return "Dood";
+    if (host.includes("sb")) return "StreamSB";
+    if (host.includes("fembed") || host.includes("fplayer")) return "Fembed";
+    if (host.includes("mega")) return "Mega";
+    if (host.includes("streamtape")) return "Streamtape";
+    if (host.includes("voe")) return "Voe";
+    if (host.includes("yourupload")) return "YourUpload";
+    if (host.includes("vid")) return "Vid";
+    const name = host.split(".")[0];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  } catch {
+    return fallback;
+  }
+}
+
 async function fetchHTML(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: HEADERS,
@@ -26,18 +84,12 @@ async function fetchHTML(url: string): Promise<string> {
 }
 
 export async function getRecentEpisodesTio(): Promise<
-  Array<{
-    animeTitle: string;
-    episodeNumber: string;
-    poster: string;
-    slug: string;
-    animeSlug: string;
-  }>
+  RecentEpisodeTio[]
 > {
   try {
     const html = await fetchHTML(BASE_URL + "/");
     const $ = cheerio.load(html);
-    const recents: any[] = [];
+    const recents: RecentEpisodeTio[] = [];
 
     $("a[href^='/ver/']").each((_, el) => {
       const href = $(el).attr("href") || "";
@@ -97,7 +149,7 @@ export async function searchAnimeTio(query: string) {
     const html = await fetchHTML(`${BASE_URL}/directorio`);
     const $ = cheerio.load(html);
     const q = query.toLowerCase();
-    const results: any[] = [];
+    const results: SearchResultTio[] = [];
 
     $("a[href^='/anime/']").each((_, el) => {
       const href = $(el).attr("href") || "";
@@ -237,7 +289,7 @@ export async function getAnimeDetailTio(slug: string): Promise<{
   });
 
   // Episodes: Tio loads them dynamically. We try to extract latest number from page or links.
-  let episodes: { number: number; id: number }[] = [];
+  const episodes: { number: number; id: number }[] = [];
 
   // Try finding any episode links in page
   $("a[href*='/ver/']").each((_, el) => {
@@ -312,53 +364,51 @@ export async function getEpisodeSourcesTio(
 
       // 1. Direct iframes (the real player embeds, not the wrapper)
       $("iframe[src]").each((_, el) => {
-        let src = ($(el).attr("src") || "").trim();
+        const src = normalizePlayerUrl($(el).attr("src") || "");
         if (!src) return;
-        if (src.startsWith("//")) src = "https:" + src;
-        if (!src.startsWith("http")) return;
         // Skip self-referential tio pages and obvious non-players
-        if (/tioanime\.com|\/ver\/|\/anime\//.test(src)) return;
+        if (!isUsablePlayerUrl(src)) return;
         if (foundUrls.has(src)) return;
         foundUrls.add(src);
-        // Derive a friendly server label
-        let serverName = "Tio";
-        try {
-          const host = new URL(src).hostname.replace(/^www\./, "");
-          if (host.includes("dood")) serverName = "Dood";
-          else if (host.includes("sb")) serverName = "StreamSB";
-          else if (host.includes("fembed") || host.includes("fplayer"))
-            serverName = "Fembed";
-          else if (host.includes("mega")) serverName = "Mega";
-          else if (host.includes("streamtape")) serverName = "Streamtape";
-          else if (host.includes("vid")) serverName = "Vid";
-          else
-            serverName = host
-              .split(".")[0]
-              .replace(/^\w/, (c) => c.toUpperCase());
-        } catch {}
+        const serverName = labelFromUrl(src, "Tio");
         sources.push({ server: `Tio ${serverName}`, url: src });
       });
 
       // 2. Script-injected video sources (common pattern)
       $("script").each((_, el) => {
-        const txt = $(el).html() || "";
+        const txt = ($(el).html() || "").replace(/\\\//g, "/");
+
+        const videosMatch = txt.match(/var\s+videos\s*=\s*(\[[\s\S]*?\]);/);
+        if (videosMatch) {
+          try {
+            const parsed = JSON.parse(videosMatch[1]);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((entry) => {
+                if (!Array.isArray(entry)) return;
+                const name = String(entry[0] || "Player").trim();
+                const u = normalizePlayerUrl(String(entry[1] || ""));
+                if (!isUsablePlayerUrl(u) || foundUrls.has(u)) return;
+                foundUrls.add(u);
+                sources.push({
+                  server: `Tio ${name || labelFromUrl(u)}`,
+                  url: u,
+                });
+              });
+            }
+          } catch {}
+        }
+
         // Look for direct video/embed urls in js
         const urlRegex =
           /https?:\/\/[^\s"'<>`]+?(?:embed|player|video|dood|stream|sb|mega|fembed|vid)[^\s"'<>`]*/gi;
         let m;
         while ((m = urlRegex.exec(txt)) !== null) {
-          let u = m[0];
+          let u = normalizePlayerUrl(m[0]);
           if (u.endsWith('"') || u.endsWith("'")) u = u.slice(0, -1);
-          if (/tioanime|\/ver\//.test(u)) continue;
+          if (!isUsablePlayerUrl(u)) continue;
           if (foundUrls.has(u)) continue;
           foundUrls.add(u);
-          let serverName = "Tio Player";
-          try {
-            const h = new URL(u).hostname;
-            serverName = h.replace(/^www\./, "").split(".")[0];
-            serverName =
-              serverName.charAt(0).toUpperCase() + serverName.slice(1);
-          } catch {}
+          const serverName = labelFromUrl(u);
           sources.push({ server: `Tio ${serverName}`, url: u });
         }
 
@@ -369,9 +419,13 @@ export async function getEpisodeSourcesTio(
             // very loose, extract any http urls inside
             const innerUrls = videoObj[1].match(/https?:\/\/[^"'\s,]+/g) || [];
             innerUrls.forEach((u) => {
-              if (!/tioanime/.test(u) && !foundUrls.has(u)) {
-                foundUrls.add(u);
-                sources.push({ server: "Tio Player", url: u });
+              const normalized = normalizePlayerUrl(u);
+              if (isUsablePlayerUrl(normalized) && !foundUrls.has(normalized)) {
+                foundUrls.add(normalized);
+                sources.push({
+                  server: `Tio ${labelFromUrl(normalized)}`,
+                  url: normalized,
+                });
               }
             });
           } catch {}
@@ -390,9 +444,8 @@ export async function getEpisodeSourcesTio(
           $el.attr("data-embed") ||
           $el.attr("data-link") ||
           "";
-        data = data.trim();
-        if (data.startsWith("//")) data = "https:" + data;
-        if (!data.startsWith("http") || /tioanime/.test(data)) return;
+        data = normalizePlayerUrl(data);
+        if (!isUsablePlayerUrl(data)) return;
         if (foundUrls.has(data)) return;
         foundUrls.add(data);
         const name = ($el.text().trim() || $el.attr("title") || "Server").slice(
@@ -410,14 +463,17 @@ export async function getEpisodeSourcesTio(
         .find("a[href]")
         .each((_, el) => {
           const href = $(el).attr("href") || "";
+          const normalized = normalizePlayerUrl(href);
           if (
-            /^https?:\/\//.test(href) &&
-            !/tioanime/.test(href) &&
-            (href.includes("embed") || href.includes("player"))
+            isUsablePlayerUrl(normalized) &&
+            (normalized.includes("embed") || normalized.includes("player"))
           ) {
-            if (!foundUrls.has(href)) {
-              foundUrls.add(href);
-              sources.push({ server: "Tio Player", url: href });
+            if (!foundUrls.has(normalized)) {
+              foundUrls.add(normalized);
+              sources.push({
+                server: `Tio ${labelFromUrl(normalized)}`,
+                url: normalized,
+              });
             }
           }
         });

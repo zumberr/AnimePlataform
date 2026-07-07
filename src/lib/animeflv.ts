@@ -58,6 +58,8 @@ export interface EpisodeSource {
   url: string;
 }
 
+type AnimeDetailCandidate = Partial<AnimeDetail> & { lastEpisode?: number };
+
 function isTioEpisodePageUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -307,7 +309,7 @@ export async function getAnimeDetail(slug: string): Promise<AnimeDetail> {
     // We don't have a full getAnimeDetailFenix yet, skip for now
   ]);
 
-  let best: any = null;
+  let best: AnimeDetailCandidate | null = null;
   for (const r of results) {
     if (
       r.status === "fulfilled" &&
@@ -509,7 +511,7 @@ export async function getEpisodeSources(slug: string): Promise<{
 
   let animeSlug = flvData.animeSlug;
   let episodeNumber = flvData.episodeNumber;
-  let animeTitle = flvData.animeTitle || slug;
+  const animeTitle = flvData.animeTitle || slug;
 
   if (!animeSlug || !episodeNumber) {
     const epMatch = slug.match(/-(\d+)$/);
@@ -612,8 +614,8 @@ export async function getHomePage(): Promise<{
   trending: AnimeCard[];
 }> {
   const [tioRecent, jkRecent, flv] = await Promise.all([
-    getRecentEpisodesTio().catch(() => [] as any[]),
-    getRecentEpisodesJK().catch(() => [] as any[]),
+    getRecentEpisodesTio().catch(() => [] as RecentEpisode[]),
+    getRecentEpisodesJK().catch(() => [] as RecentEpisode[]),
     getHomePageFLV().catch(() => ({
       recent: [] as RecentEpisode[],
       trending: [] as AnimeCard[],
