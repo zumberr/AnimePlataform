@@ -8,10 +8,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("Manga list error:", message);
-    return NextResponse.json(
-      { error: `Error al cargar la lista de mangas: ${message}` },
-      { status: 502 }
-    );
+    console.warn("Manga list error (Ikigai API down):", message);
+    // Return empty page so UI doesn't break while Ikigai backend is unstable
+    return NextResponse.json({
+      data: [],
+      current_page: page,
+      last_page: 1,
+      total: 0,
+      per_page: 18,
+    });
   }
 }

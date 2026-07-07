@@ -1,16 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { AnimeDetail } from "@/lib/animeflv";
-import { Play, ArrowLeft, Star, Tv, Tag } from "lucide-react";
+import {
+  Play,
+  ArrowLeft,
+  Star,
+  Tv,
+  Tag,
+  ArrowUpDown,
+  Search,
+} from "lucide-react";
 
 export default function AnimeDetailPage() {
   const params = useParams();
   const slug = params.slug as string;
   const [anime, setAnime] = useState<AnimeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Episodes UI state
+  const [showLatestFirst, setShowLatestFirst] = useState(true);
+  const [jumpTo, setJumpTo] = useState("");
+
+  const sortedEpisodes = useMemo(() => {
+    if (!anime) return [];
+    const eps = [...anime.episodes];
+    return showLatestFirst ? [...eps].reverse() : eps;
+  }, [anime, showLatestFirst]);
 
   useEffect(() => {
     if (!slug) return;
@@ -159,27 +177,100 @@ export default function AnimeDetailPage() {
         </div>
       </div>
 
-      {/* Episodes List */}
+      {/* Episodes List - visually & technically improved */}
       <div className="px-4 sm:px-6 lg:px-8 py-10 max-w-7xl mx-auto">
-        <h2 className="text-xl font-semibold text-white mb-4">
-          Episodios ({anime.episodes.length})
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
-          {anime.episodes.map((ep) => (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-xl font-semibold text-white">
+              Episodios{" "}
+              <span className="text-muted-foreground font-normal">
+                ({anime.episodes.length})
+              </span>
+            </h2>
+            {anime.episodes.length > 0 && (
+              <Link
+                href={`/episode/${slug}-${anime.episodes[anime.episodes.length - 1].number}`}
+                className="inline-flex items-center gap-1.5 text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1 rounded-full transition"
+              >
+                <Play size={12} /> Ver último
+              </Link>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Jump to episode */}
+            <div className="relative">
+              <input
+                type="number"
+                min={1}
+                max={anime.episodes.length}
+                value={jumpTo}
+                onChange={(e) => setJumpTo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && jumpTo) {
+                    const n = Math.max(
+                      1,
+                      Math.min(anime.episodes.length, parseInt(jumpTo)),
+                    );
+                    window.location.href = `/episode/${slug}-${n}`;
+                  }
+                }}
+                placeholder="Ir al Ep"
+                className="bg-secondary border border-border w-24 text-sm rounded-lg pl-8 py-1.5 focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground"
+              />
+              <Search
+                size={14}
+                className="absolute left-2.5 top-2.5 text-muted-foreground"
+              />
+            </div>
+
+            {/* Order toggle */}
+            <button
+              onClick={() => setShowLatestFirst(!showLatestFirst)}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border rounded-lg transition active:scale-[0.985]"
+            >
+              <ArrowUpDown size={15} />
+              {showLatestFirst ? "Más recientes primero" : "Del 1 al último"}
+            </button>
+          </div>
+        </div>
+
+        {/* Episodes grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9 2xl:grid-cols-10 gap-2 sm:gap-2.5">
+          {sortedEpisodes.map((ep) => (
             <Link
               key={ep.number}
               href={`/episode/${slug}-${ep.number}`}
-              className="group flex items-center justify-center gap-1.5 bg-secondary hover:bg-primary/20 border border-border hover:border-primary/50 rounded-lg py-3 px-3 transition-all"
+              className="group flex items-center gap-3 bg-secondary hover:bg-primary/10 border border-border hover:border-primary/50 rounded-xl px-3 py-2.5 transition-all active:scale-[0.985]"
             >
-              <Play
-                size={14}
-                className="text-muted-foreground group-hover:text-primary transition-colors"
-              />
-              <span className="text-sm font-medium text-muted-foreground group-hover:text-white transition-colors">
-                Ep {ep.number}
-              </span>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black/40 group-hover:bg-primary/90 transition-colors">
+                <Play
+                  size={15}
+                  className="text-muted-foreground group-hover:text-white transition-colors"
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white group-hover:text-primary transition">
+                  Episodio {ep.number}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Ver ahora
+                </div>
+              </div>
             </Link>
           ))}
+        </div>
+
+        {anime.episodes.length === 0 && (
+          <p className="text-muted-foreground text-sm py-4">
+            No se encontraron episodios.
+          </p>
+        )}
+
+        <div className="mt-4 text-xs text-muted-foreground">
+          Tip: Usa el campo “Ir al Ep” o cambia el orden para encontrar más
+          rápido.
         </div>
       </div>
     </div>

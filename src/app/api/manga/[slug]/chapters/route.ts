@@ -3,7 +3,7 @@ import { getMangaChapters } from "@/lib/ikigai";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await params;
@@ -11,10 +11,10 @@ export async function GET(
     const data = await getMangaChapters(slug, page);
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Manga chapters error:", error);
+    console.warn("Manga chapters error (Ikigai API):", error);
     return NextResponse.json(
-      { error: "Error al cargar capitulos" },
-      { status: 500 }
+      { data: [], meta: { current_page: 1, last_page: 1, total: 0 } },
+      { status: 200 },
     );
   }
 }

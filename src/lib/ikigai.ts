@@ -6,6 +6,7 @@ const HEADERS: Record<string, string> = {
   Accept: "application/json",
   Referer: "https://ikigaimangas.com/",
   Origin: "https://ikigaimangas.com",
+  Cookie: "nsfw-mode=false",
 };
 
 const FETCH_TIMEOUT = 10000; // 10 seconds
@@ -88,7 +89,7 @@ async function fetchJSON<T>(url: string): Promise<T> {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `Ikigai API error: ${res.status} for ${url} — ${text.slice(0, 200)}`
+        `Ikigai API error: ${res.status} for ${url} — ${text.slice(0, 200)}`,
       );
     }
     return res.json();
@@ -103,44 +104,42 @@ async function fetchJSON<T>(url: string): Promise<T> {
 }
 
 export async function getPopularManga(
-  page = 1
+  page = 1,
 ): Promise<PaginatedResponse<MangaSeries & { rank: number; views: number }>> {
   return fetchJSON(
-    `${API_BASE}/series/ranking-list?type=total&series_type=comic&nsfw=false&page=${page}`
+    `${API_BASE}/series/ranking-list?type=total_ranking&series_type=comic&nsfw=false&page=${page}`,
   );
 }
 
 export async function getNewChapters(
-  page = 1
+  page = 1,
 ): Promise<PaginatedResponse<NewChapterEntry>> {
-  return fetchJSON(
-    `${API_BASE}/new-chapters?nsfw=false&page=${page}`
-  );
+  return fetchJSON(`${API_BASE}/new-chapters?nsfw=false&page=${page}`);
 }
 
 export async function getAllSeries(
   page = 1,
-  pageSize = 15
+  pageSize = 15,
 ): Promise<PaginatedResponse<MangaSeries>> {
   return fetchJSON(
-    `${API_BASE}/series?page=${page}&pageSize=${pageSize}&sort=desc`
+    `${API_BASE}/series?page=${page}&pageSize=${pageSize}&sort=desc`,
   );
 }
 
 export async function getMangaDetail(
-  slug: string
+  slug: string,
 ): Promise<{ series: MangaDetail; similar_series: MangaSeries[] | null }> {
   return fetchJSON(`${API_BASE}/series/${encodeURIComponent(slug)}`);
 }
 
 export async function getMangaChapters(
   slug: string,
-  page = 1
+  page = 1,
 ): Promise<{
   data: MangaChapter[];
   meta: { current_page: number; last_page: number; total: number };
 }> {
   return fetchJSON(
-    `${API_BASE}/series/${encodeURIComponent(slug)}/chapters?page=${page}`
+    `${API_BASE}/series/${encodeURIComponent(slug)}/chapters?page=${page}`,
   );
 }
